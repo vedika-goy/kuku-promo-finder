@@ -1,0 +1,8 @@
+.venv/
+.env
+.cache/
+__pycache__/
+*.pyc
+.pytest_cache/
+# The input pack is Kuku's confidential content: never commit it.
+data/
