@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Promo Finder</title>
+<style>
+  @page { size: A4; margin: 10mm 11mm 10mm 11mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 8.2pt; line-height: 1.3; color: #1f1f1d; margin: 0; }
+  h1 { font-size: 14pt; margin: 0 0 1pt; font-weight: 650; letter-spacing: -0.1pt; }
+  .meta { color: #5f5e5a; margin: 0 0 4pt; font-size: 7.8pt; }
+  h2 { font-size: 9.6pt; color: #3c3489; margin: 6pt 0 2pt; padding-bottom: 1pt; border-bottom: 0.5pt solid #cecbf6; font-weight: 650; }
+  p { margin: 0 0 3pt; }
+  ul { margin: 0 0 3pt; padding-left: 11pt; }
+  li { margin: 0 0 1.2pt; }
+  code { font-family: Menlo, Consolas, monospace; font-size: 7.3pt; background: #f1efe8; padding: 0 1.5pt; border-radius: 2pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2pt 0 3pt; font-size: 7.6pt; }
+  th, td { border: 0.5pt solid #d3d1c7; padding: 1.6pt 3pt; vertical-align: top; text-align: left; }
+  th { background: #f1efe8; font-weight: 600; }
+  .num { text-align: right; white-space: nowrap; }
+  .nowrap { white-space: nowrap; }
+  .figure { margin: 2pt 0 3pt; }
+  .caption { font-size: 7.2pt; color: #5f5e5a; margin-top: 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12pt; }
+  .page-break { break-before: page; }
+  .key { background: #eeedfe; border-left: 2pt solid #7f77dd; padding: 2.5pt 5pt; margin: 2pt 0 3pt; }
+  b { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>Promo Finder: ranked 20–60 s promos from microdrama screenplays</h1>
+<p class="meta">[Your name] · Kuku AI Generalist · Problem 1 · Show: <i>I Married a Broken Soldier. He was a Duke</i> · Prototype: [repo link], run with <code>python run.py --input &lt;folder or .zip&gt;</code> · Raw outputs: <code>outputs/</code></p>
+
+<h2>Why this problem, and assumptions</h2>
+<p>An editor watches about 100 minutes per show to pick a handful of clips, and a new show arrives every week. The input pack times every shot, action, sound and line, so the hard parts of a promo can be <b>enforced in code</b>: length, a hook in 3 seconds, a cut before the answer. The soft parts can be <b>tested</b>: does it grab, can a stranger follow it. The tool is built around that split.</p>
+<div class="two-col">
+<ul>
+  <li><b>The script is the edit.</b> CAMERA blocks are the shots, so a cut lands on a shot boundary or between lines, never inside a line. Visual moments are judged from the shot descriptions.</li>
+  <li><b>Hook</b> means the hook's sentence starts within 3 s. <b>Cliffhanger</b> means the clip ends before the line that answers it, and nothing is said after it.</li>
+</ul>
+<ul>
+  <li><b>Episodes 1–10 are free</b> (typical for these apps). Promos from them rank higher and are never held back as spoilers. The title ("He was a Duke") and the premise are not spoilers.</li>
+  <li>At most 3 segments, each at least 3 s, in story order. There are no text overlays, so a stitched promo must read straight through.</li>
+</ul>
+</div>
+
+<h2>Pipeline: what goes to AI, code and a human</h2>
+<div class="key"><b>The LLM judges, code measures.</b> The model only points at block ids (<code>E03-B071</code>). Every timestamp, rule, stitch and de-duplication is code, checked against the parsed script, so a model can never invent a time or a quote.</div>
+<div class="figure">
+<svg viewBox="0 0 760 142" width="100%" role="img" aria-label="Pipeline: parse, line features, story bible, tagging, merge, candidates, cold viewer, pairwise, rank, editor">
+  <defs>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#5f5e5a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs>
+  <style>
+    .t { font: 600 10.5px -apple-system, Helvetica, Arial, sans-serif; }
+    .s { font: 400 8.8px -apple-system, Helvetica, Arial, sans-serif; }
+    .code rect { fill: #f1efe8; stroke: #888780; } .code text { fill: #2c2c2a; }
+    .llm rect { fill: #eeedfe; stroke: #7f77dd; } .llm text { fill: #3c3489; }
+    .human rect { fill: #faece7; stroke: #d85a30; } .human text { fill: #712b13; }
+    .arrow { stroke: #5f5e5a; stroke-width: 1; fill: none; }
+  </style>
+  <g class="code"><rect x="6" y="6" width="132" height="48" rx="5" stroke-width="0.8"/><text class="t" x="72" y="21" text-anchor="middle">1 Parse</text><text class="s" x="72" y="34" text-anchor="middle">screenplays → timed</text><text class="s" x="72" y="45" text-anchor="middle">blocks (3,727)</text></g>
+  <g class="code"><rect x="158" y="6" width="132" height="48" rx="5" stroke-width="0.8"/><text class="t" x="224" y="21" text-anchor="middle">2 Line features</text><text class="s" x="224" y="34" text-anchor="middle">writer's emotion tags,</text><text class="s" x="224" y="45" text-anchor="middle">sound cues, recaps</text></g>
+  <g class="llm"><rect x="310" y="6" width="132" height="48" rx="5" stroke-width="0.8"/><text class="t" x="376" y="21" text-anchor="middle">3 Story bible</text><text class="s" x="376" y="34" text-anchor="middle">characters, aliases,</text><text class="s" x="376" y="45" text-anchor="middle">arcs, spoiler levels</text></g>
+  <g class="llm"><rect x="462" y="6" width="132" height="48" rx="5" stroke-width="0.8"/><text class="t" x="528" y="21" text-anchor="middle">4 Tagging</text><text class="s" x="528" y="34" text-anchor="middle">hooks, cliffhangers,</text><text class="s" x="528" y="45" text-anchor="middle">arc lines, by block id</text></g>
+  <g class="code"><rect x="614" y="6" width="140" height="48" rx="5" stroke-width="0.8"/><text class="t" x="684" y="21" text-anchor="middle">5 Merge + review</text><text class="s" x="684" y="34" text-anchor="middle">LLM tags × signals;</text><text class="s" x="684" y="45" text-anchor="middle">LLM rechecks disputes</text></g>
+  <line class="arrow" x1="138" y1="30" x2="156" y2="30" marker-end="url(#arrowhead)"/>
+  <line class="arrow" x1="290" y1="30" x2="308" y2="30" marker-end="url(#arrowhead)"/>
+  <line class="arrow" x1="442" y1="30" x2="460" y2="30" marker-end="url(#arrowhead)"/>
+  <line class="arrow" x1="594" y1="30" x2="612" y2="30" marker-end="url(#arrowhead)"/>
+  <line class="arrow" x1="684" y1="54" x2="684" y2="70" marker-end="url(#arrowhead)"/>
+  <g class="code"><rect x="614" y="72" width="140" height="48" rx="5" stroke-width="0.8"/><text class="t" x="684" y="87" text-anchor="middle">6 Candidates</text><text class="s" x="684" y="100" text-anchor="middle">snap to shots, stitch,</text><text class="s" x="684" y="111" text-anchor="middle">compress, rules, dedup</text></g>
+  <g class="llm"><rect x="462" y="72" width="132" height="48" rx="5" stroke-width="0.8"/><text class="t" x="528" y="87" text-anchor="middle">7 Cold viewer</text><text class="s" x="528" y="100" text-anchor="middle">3-s opening test, viewer,</text><text class="s" x="528" y="111" text-anchor="middle">grader with the bible</text></g>
+  <g class="llm"><rect x="310" y="72" width="132" height="48" rx="5" stroke-width="0.8"/><text class="t" x="376" y="87" text-anchor="middle">7b Pairwise</text><text class="s" x="376" y="100" text-anchor="middle">top 15, both orders,</text><text class="s" x="376" y="111" text-anchor="middle">Bradley–Terry strength</text></g>
+  <g class="code"><rect x="158" y="72" width="132" height="48" rx="5" stroke-width="0.8"/><text class="t" x="224" y="87" text-anchor="middle">8 Rank</text><text class="s" x="224" y="100" text-anchor="middle">pairwise + score,</text><text class="s" x="224" y="111" text-anchor="middle">diversity, why-line</text></g>
+  <g class="human"><rect x="6" y="72" width="132" height="48" rx="5" stroke-width="0.8"/><text class="t" x="72" y="87" text-anchor="middle">Editor</text><text class="s" x="72" y="100" text-anchor="middle">reviews the top 10,</text><text class="s" x="72" y="111" text-anchor="middle">trims in/out ±0.5 s</text></g>
+  <line class="arrow" x1="614" y1="96" x2="596" y2="96" marker-end="url(#arrowhead)"/>
+  <line class="arrow" x1="462" y1="96" x2="444" y2="96" marker-end="url(#arrowhead)"/>
+  <line class="arrow" x1="310" y1="96" x2="292" y2="96" marker-end="url(#arrowhead)"/>
+  <line class="arrow" x1="158" y1="96" x2="140" y2="96" marker-end="url(#arrowhead)"/>
+  <g class="code"><rect x="250" y="129" width="10" height="9" rx="2" stroke-width="0.8"/></g><text class="s" x="264" y="137" fill="#2c2c2a">code (deterministic, tested)</text>
+  <g class="llm"><rect x="400" y="129" width="10" height="9" rx="2" stroke-width="0.8"/></g><text class="s" x="414" y="137" fill="#3c3489">LLM (Claude, swappable in .env)</text>
+  <g class="human"><rect x="560" y="129" width="10" height="9" rx="2" stroke-width="0.8"/></g><text class="s" x="574" y="137" fill="#712b13">human</text>
+</svg>
+</div>
+<ul>
+  <li><b>Two independent signals.</b> The first is the LLM's tags. The second needs no model:
+    <ul>
+      <li>the writer's emotion tags, mapped to an intensity through word lists (97.8% of tagged lines covered)</li>
+      <li>114 typed sound cues (a few literally say "cliffhanger peak")</li>
+    </ul>
+    The tagger never sees the emotion scores, so the two can check each other. Lines the signal flags but the tagger missed get one LLM review.</li>
+  <li><b>Candidates.</b> Every hook × cliffhanger pair is tried, within an episode and across an episode break (the next episode's opening recap is skipped). Clips are snapped to shots and shortened by dropping filler shots, never lines marked essential. Then the hard rules run, and clips sharing more than half their lines are de-duplicated.</li>
+  <li><b>Judging.</b>
+    <ul>
+      <li>An opening test sees only the first 3 s.</li>
+      <li>A cold viewer sees the whole clip, with names hidden unless someone says them.</li>
+      <li>A grader holding the story bible scores the viewer's comprehension, and rejects clips that answer their own question.</li>
+      <li>The top 15 then meet head to head, in both orders; a win that flips with the order counts as a tie. The posting order is 0.6 × pairwise strength + 0.4 × score, with a penalty for repeating an episode, arc or hook type.</li>
+    </ul></li>
+</ul>
+<div class="figure">
+<svg viewBox="0 0 760 138" width="100%" role="img" aria-label="Promo 1 drawn under the Episode 3 timeline it is cut from, with the emotion line from the writer's tags over the promo">
+  <defs>
+    <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#b4b2a9" stroke-width="1.6"/></pattern>
+  </defs>
+  <style>
+    .lbl { font: 600 9.5px -apple-system, Helvetica, Arial, sans-serif; fill: #2c2c2a; }
+    .ann { font: 400 8.6px -apple-system, Helvetica, Arial, sans-serif; fill: #444441; }
+    .tick { stroke: #ffffff; stroke-width: 1; }
+    .guide { stroke: #7f77dd; stroke-width: 0.6; stroke-dasharray: 3 2; }
+  </style>
+  <text class="lbl" x="6" y="25">Episode 3</text>
+  <text class="ann" x="6" y="36">(script, 2:26)</text>
+  <path d="M467.8 13 l4 -7 l4 7 z" fill="#d85a30"/><text class="ann" x="463" y="11" text-anchor="end">hook: guard takedown (1:24)</text>
+  <path d="M720.5 13 l4 -7 l4 7 z" fill="#3c3489"/><text class="ann" x="716" y="11" text-anchor="end">cliffhanger (2:20)</text>
+  <rect x="96" y="16" width="652" height="16" fill="#f1efe8" stroke="#b4b2a9" stroke-width="0.6"/>
+  <rect x="471.8" y="16" width="143.1" height="16" fill="#cecbf6" stroke="#7f77dd" stroke-width="0.8"/>
+  <rect x="614.9" y="16" width="8.5" height="16" fill="url(#hatch)" stroke="#888780" stroke-width="0.6"/>
+  <rect x="623.4" y="16" width="124.6" height="16" fill="#cecbf6" stroke="#7f77dd" stroke-width="0.8"/>
+  <g class="tick"><line x1="140" y1="16" x2="140" y2="32"/><line x1="185" y1="16" x2="185" y2="32"/><line x1="232" y1="16" x2="232" y2="32"/><line x1="270" y1="16" x2="270" y2="32"/><line x1="318" y1="16" x2="318" y2="32"/><line x1="360" y1="16" x2="360" y2="32"/><line x1="410" y1="16" x2="410" y2="32"/><line x1="500" y1="16" x2="500" y2="32"/><line x1="533" y1="16" x2="533" y2="32"/><line x1="575" y1="16" x2="575" y2="32"/><line x1="650" y1="16" x2="650" y2="32"/><line x1="684" y1="16" x2="684" y2="32"/><line x1="712" y1="16" x2="712" y2="32"/></g>
+  <line class="guide" x1="471.8" y1="33" x2="471.8" y2="57"/>
+  <line class="guide" x1="614.9" y1="33" x2="614.9" y2="57"/>
+  <line class="guide" x1="623.4" y1="33" x2="623.4" y2="57"/>
+  <line class="guide" x1="748" y1="33" x2="748" y2="57"/>
+  <text class="ann" x="628" y="47">&#8592; filler shot dropped</text>
+  <text class="lbl" x="6" y="76">Promo #1</text>
+  <text class="ann" x="6" y="87">(60 s, 2 segments,</text>
+  <text class="ann" x="6" y="97">same time scale)</text>
+  <rect x="471.8" y="58" width="143.1" height="44" fill="#eeedfe" stroke="#7f77dd" stroke-width="0.8"/>
+  <rect x="623.4" y="58" width="124.6" height="44" fill="#eeedfe" stroke="#7f77dd" stroke-width="0.8"/>
+  <rect x="471.8" y="58" width="13.4" height="44" fill="#f0997b" fill-opacity="0.55"/>
+  <polyline points="471.8,68.0 474.0,66.0 478.9,64.0 500.4,92.0 506.7,88.0 516.9,66.0 527.7,64.0 538.0,86.0 546.9,72.0 562.1,80.0 576.4,80.0 592.1,80.0 600.6,92.0" fill="none" stroke="#d85a30" stroke-width="1.4" stroke-linejoin="round"/>
+  <polyline points="631.9,92.0 644.0,80.0 656.5,92.0 667.3,80.0 679.3,86.0 691.9,88.0 699.0,70.0 711.1,80.0 724.5,88.0" fill="none" stroke="#d85a30" stroke-width="1.4" stroke-linejoin="round"/>
+  <circle cx="478.9" cy="64.0" r="1.8" fill="#d85a30"/><circle cx="699.0" cy="70.0" r="1.8" fill="#d85a30"/>
+  <text class="ann" x="462" y="67" text-anchor="end">orange line: intensity from the writer's emotion tags (0–1)</text>
+  <text class="ann" x="462" y="78" text-anchor="end">peaks at the punch, inside the shaded 0–3 s hook window,</text>
+  <text class="ann" x="462" y="89" text-anchor="end">and again at the crowd's gasp just before the cut</text>
+  <text class="ann" x="462" y="100" text-anchor="end">ends on the reaction shot: no answer, no dialogue after it</text>
+  <text class="ann" x="96" y="122">White ticks are shot boundaries (CAMERA blocks), the only places a cut may land. Across episodes the same rules apply:</text>
+  <text class="ann" x="96" y="133">end of Ep N + Ep N+1 from after its recap (promo #6 in the full results, the proposal from Ep 3 into Ep 4).</text>
+</svg>
+</div>
+
+<h2>Scale and cost</h2>
+<ul>
+  <li><b>5 episodes, fresh run:</b> 59 LLM calls on Claude Opus 5.5, about $1.20 and 2 minutes with 4 calls in parallel. Every reply is cached, so a rerun costs $0 and reproduces <code>promos.json</code> byte for byte.</li>
+  <li><b>A whole 50-episode show:</b> about $7 and 10 minutes (estimated from the measured tokens).
+    <ul>
+      <li>Tagging is about $3.70. Moving it to Sonnet 5.5 roughly halves that, and is a one-line <code>.env</code> change; any OpenAI-compatible API also works.</li>
+      <li>The cold viewer on the top 35 is about $1.60.</li>
+      <li>Pairwise (78 calls) is about $1.10.</li>
+      <li>The emotion and sound signal costs nothing: it is word lists in code.</li>
+    </ul></li>
+  <li><b>Editor time:</b> about 10 minutes reviewing 10 ranked clips with exact in/out points, instead of watching about 103 minutes of episodes.</li>
+</ul>
+
+<h2 class="page-break">Results (first 5 episodes; the 50-episode run is next, about $7)</h2>
+<p>25 hooks and 15 cliffhangers were tagged. From them, 21 candidates were built and 7 passed every rule and de-duplication: 4 single stretches, 2 compressed, 1 across Ep 3 → 4. All 7 survived the cold viewer. Top 5, with the tool's own why-lines:</p>
+<table style="table-layout: fixed">
+  <colgroup><col style="width:2.5%"><col style="width:21%"><col style="width:5%"><col style="width:20%"><col style="width:18%"><col style="width:33.5%"></colgroup>
+  <tr><th>#</th><th>Segments</th><th class="num">Len</th><th>Hook</th><th>Cliffhanger</th><th>Why it works (tool output)</th></tr>
+  <tr><td>1</td><td class="nowrap">Ep 3 01:24.00–01:56.00<br>+ Ep 3 01:57.90–02:25.75</td><td class="num">60 s</td><td>The stranger blocks the guard's strike and drops him with one blow</td><td>Juliana gazes at her rescuer as the score holds</td><td>Opens on a one-punch takedown of an armed guard; ends on Juliana's emotional gaze, leaving who the stranger is and whether she'll say yes.</td></tr>
+  <tr><td>2</td><td class="nowrap">Ep 5 00:54.00–01:41.50</td><td class="num">48 s</td><td>Lady Ashcroft snatches the book and flings it into the rain</td><td>"Choose your next words carefully."</td><td>Lady Ashcroft flings the book into the rain instantly; the warning cut leaves what the bearded 'beggar' will do to Gerald and who he is.</td></tr>
+  <tr><td>3</td><td>Ep 1 01:08.80–01:23.70 + 01:30.80–02:02.50 + 02:04.20–02:17.00</td><td class="num">59 s</td><td>"Of course I knew."</td><td>Close-up: her tears harden into defiance</td><td>Villain's cheerful 'Of course I knew' opens on betrayal; Juliana's tears hardening into defiance leave what revenge she'll take, and how.</td></tr>
+  <tr><td>4</td><td class="nowrap">Ep 5 00:23.10–01:09.00</td><td class="num">46 s</td><td>"From this moment, you are dead to the Ashcroft family."</td><td>Her hand reaching for the ledger in the puddle</td><td>'Dead to the Ashcroft family' disinherits her in the first line; her hand reaching for the muddy ledger leaves what's inside and who'll intervene.</td></tr>
+  <tr><td>5</td><td class="nowrap">Ep 2 01:14.20–01:47.90</td><td class="num">34 s</td><td>"Dignity?"</td><td>"…I will not leave it believing I was the one who should be ashamed."</td><td>A defiant 'Dignity?' launches a public accusation; her refusal to carry the shame leaves how the family retaliates and who the other woman is.</td></tr>
+</table>
+<p><b>Why this order.</b> #1 won 4 of its 5 head-to-heads and tied the fifth, against #3. A typical judge comment: it "opens on an instant one-punch takedown that stops the scroll". #4 had the second-highest pairwise strength (0.93), but it is a second promo from Ep 5, so the diversity penalty puts it after #3. Every promo is from a free episode.</p>
+
+<h2>Quality checking</h2>
+<ul>
+  <li><b>Hard rules, in code, on every candidate:</b> length, hook within 3 s, no answer line or dialogue after the cliffhanger, no cut through a line, segment limits, no recap. Each rejection is logged with its reason. Of 21 candidates, 14 were rejected: too long 5, recap inside 6, duplicate 3, and so on; some had more than one reason.</li>
+  <li><b>46 tests</b>, one per business rule, plus a synthetic "new show" run end to end. It has uppercase labels, Windows line endings and renamed files: the interview scenario.</li>
+  <li><b>Six development runs on episodes 1–5</b>, each fixing a failure the previous run exposed:</li>
+</ul>
+<table>
+  <colgroup><col style="width:29%"><col style="width:11%"><col style="width:14%"><col style="width:46%"></colgroup>
+  <tr><th>Measure</th><th class="num">Before</th><th class="num">Final</th><th>What changed</th></tr>
+  <tr><td>Candidates built / promos ranked</td><td class="num">14 / 4</td><td class="num">21 / 7</td><td>LLM-rated 4s reach the cold viewer without an emotion spike</td></tr>
+  <tr><td>Clips held back as "spoilers"</td><td class="num">3</td><td class="num">0</td><td>No holds in free episodes; the premise is not a spoiler</td></tr>
+  <tr><td>"Would stop scrolling"</td><td class="num">7 of 7 (run 2)</td><td class="num">2–3 on a 1–5 scale</td><td>A separate test that sees only the first 3 s</td></tr>
+  <tr><td>Top-7 spread (same run): score vs pairwise</td><td class="num">0.60–0.81</td><td class="num">0.00–1.00</td><td>Head-to-head comparison instead of absolute scores</td></tr>
+  <tr><td>Rerun gives identical output</td><td class="num">no</td><td class="num">yes</td><td>Fixed the name-hiding bug (see below)</td></tr>
+</table>
+
+<h2>Where the tool picks badly</h2>
+<table style="table-layout: fixed">
+  <colgroup><col style="width:12%"><col style="width:30%"><col style="width:31%"><col style="width:27%"></colgroup>
+  <tr><th>Case</th><th>Cause</th><th>Effect</th><th>Status</th></tr>
+  <tr><td>Mid-sentence opening</td><td>The tagger picked a line starting with "...". 38 of the pack's 39 such lines finish the speaker's previous line.</td><td>A promo opened on "...than spend another moment begging for yours.": half a sentence.</td><td>Fixed in code: hooks start at the sentence start; no clip opens on a sentence tail.</td></tr>
+  <tr><td>Premise flagged as spoiler</td><td>The tagger and story bible treated the premise (the stranger's rescue, the marriage) as major twists.</td><td>The strongest hook, the guard takedown (score 1.0), was held back. It is now #1.</td><td>Fixed: no holds in episodes 1–10; the prompt says the title and premise aren't spoilers.</td></tr>
+  <tr><td>Test viewer too kind</td><td>The viewer judged the opening after reading the whole clip.</td><td>"Would stop scrolling" for 7 of 7 clips, so the score separated nothing.</td><td>Fixed: a separate 3-s opening test, and pairwise comparison for the order.</td></tr>
+  <tr><td>Strangers only half follow</td><td>30–60 s rarely establishes family ties (stepmother or mother? sister?).</td><td>Comprehension 1 of 2 for 6 of 7 promos.</td><td>Open: flagged <code>CONTEXT_RISK</code>; the setup-line repair only fits compressed clips.</td></tr>
+  <tr><td>Sound-word trap</td><td>The sound word list matches "slap" anywhere in a cue.</td><td>"A heavy wet slap as the… book crashes into the puddle" counts as a hit, like a slap.</td><td>Open: harmless here, because the LLM picked the same moment.</td></tr>
+  <tr><td>Timing</td><td>Cuts follow the script's timestamps, not the final video.</td><td>A cut can land slightly off in the real edit. <code>MID_SHOT_*</code> flags mark cuts inside a shot.</td><td>The editor checks in/out points against the video.</td></tr>
+</table>
+
+<h2>AI tools, and where they got it wrong</h2>
+<p>I used <b>Claude Code</b> for the design discussion, code, tests and this document. <b>Claude Opus 5.5</b> runs inside the tool for the story bible, tagging, the viewers, the grader, pairwise and why-lines. Every number is computed in plain Python and traceable to <code>outputs/</code>. Where the AI got it wrong (full log in <code>docs/ai_log.md</code>):</p>
+<p>(1) The tagger marked the show's premise as major twists, which hid the best hook. (2) The simulated viewer said it would stop scrolling for everything. (3) Claude Code wrote a name-hider with two faults: it relabelled characters in a different random order on each run, so the cache missed and verdicts changed, and it split "Mysterious Bearded Man" into three people. I caught it when a promo's score fell from 0.91 to 0.68 with nothing upstream changed. (4) The sound word list matched "crack" inside "crackle", so a fireplace counted as an impact sound. (5) The plan assumed episode recaps repeat lines word for word. They reword them, so recap detection now uses word overlap.</p>
+
+</body>
+</html>
